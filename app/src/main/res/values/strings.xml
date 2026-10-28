@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Volume Burst Cam</string>
+    <string name="accessibility_service_description">Lets Volume Burst Cam detect a triple press of Volume Down, including when the screen is locked, so it can trigger a photo burst. It does not read or act on anything else on screen.</string>
+    <string name="capture_notification_channel">Burst capture</string>
+    <string name="capture_notification_title">Volume Burst Cam</string>
+    <string name="capture_notification_text">Capturing burst…</string>
+</resources>
