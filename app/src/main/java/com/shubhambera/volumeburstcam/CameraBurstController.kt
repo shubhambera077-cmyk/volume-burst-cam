@@ -1,7 +1,10 @@
 package com.shubhambera.volumeburstcam
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -81,6 +84,7 @@ class CameraBurstController(
         provider.unbindAll()
     }
 
+    @SuppressLint("MissingPermission") // Checked manually via hasMicPermission() below.
     private suspend fun recordOnce(
         provider: ProcessCameraProvider,
         selector: CameraSelector,
@@ -107,12 +111,19 @@ class CameraBurstController(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         ).setContentValues(contentValues).build()
 
-        // No audio track is recorded — keeps this permission-free and
-        // matches the app's "silent" design (same spirit as "no flash").
+        val micGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
         suspendCancellableCoroutine<Unit> { cont ->
+            var pending = videoCapture.output.prepareRecording(context, outputOptions)
+            if (micGranted) {
+                pending = pending.withAudioEnabled()
+            }
+
             var recording: Recording? = null
-            recording = videoCapture.output
-                .prepareRecording(context, outputOptions)
+            recording = pending
                 .start(ContextCompat.getMainExecutor(context)) { event ->
                     if (event is VideoRecordEvent.Finalize) {
                         if (cont.isActive) {

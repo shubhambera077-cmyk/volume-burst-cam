@@ -52,6 +52,9 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    private val microphonePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -59,11 +62,13 @@ class MainActivity : ComponentActivity() {
                 AppScreen(
                     onRequestCamera = { requestCameraPermission() },
                     onRequestNotifications = { requestNotificationPermission() },
+                    onRequestMicrophone = { requestMicrophonePermission() },
                     onOpenAccessibilitySettings = { openAccessibilitySettings() },
                     onRequestIgnoreBattery = { requestIgnoreBatteryOptimizations() },
                     onOpenAutoStart = { openAutoStartSettings() },
                     hasCameraPermission = { hasCameraPermission() },
                     hasNotificationPermission = { hasNotificationPermission() },
+                    hasMicrophonePermission = { hasMicrophonePermission() },
                     isAccessibilityEnabled = { isAccessibilityServiceEnabled() },
                     isIgnoringBattery = { isIgnoringBatteryOptimizations() }
                 )
@@ -89,6 +94,14 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    private fun hasMicrophonePermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun requestMicrophonePermission() {
+        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
@@ -155,11 +168,13 @@ class MainActivity : ComponentActivity() {
 private fun AppScreen(
     onRequestCamera: () -> Unit,
     onRequestNotifications: () -> Unit,
+    onRequestMicrophone: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onRequestIgnoreBattery: () -> Unit,
     onOpenAutoStart: () -> Unit,
     hasCameraPermission: () -> Boolean,
     hasNotificationPermission: () -> Boolean,
+    hasMicrophonePermission: () -> Boolean,
     isAccessibilityEnabled: () -> Boolean,
     isIgnoringBattery: () -> Boolean
 ) {
@@ -178,6 +193,7 @@ private fun AppScreen(
     var refreshTick by remember { mutableIntStateOf(0) }
     val cameraOk = remember(refreshTick) { hasCameraPermission() }
     val notifOk = remember(refreshTick) { hasNotificationPermission() }
+    val micOk = remember(refreshTick) { hasMicrophonePermission() }
     val accessibilityOk = remember(refreshTick) { isAccessibilityEnabled() }
     val batteryOk = remember(refreshTick) { isIgnoringBattery() }
 
@@ -310,6 +326,14 @@ private fun AppScreen(
                     done = notifOk,
                     actionLabel = "Grant",
                     onAction = onRequestNotifications
+                )
+                DividerLine()
+                SetupRow(
+                    title = "Microphone",
+                    subtitle = "Optional — only used for video audio",
+                    done = micOk,
+                    actionLabel = "Grant",
+                    onAction = onRequestMicrophone
                 )
                 DividerLine()
                 SetupRow(
@@ -508,7 +532,14 @@ private fun AppScreen(
                 ) {
                     Column {
                         Text("Flash", color = TextPrimary, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
-                        Text("Always off · no light, no sound", color = TextFaint, fontSize = 11.5.sp)
+                        Text(
+                            if (captureType == CaptureType.VIDEO && micOk)
+                                "Always off · audio on (mic granted)"
+                            else
+                                "Always off · no light, no sound",
+                            color = TextFaint,
+                            fontSize = 11.5.sp
+                        )
                     }
                     Box(
                         modifier = Modifier
