@@ -166,10 +166,12 @@ private fun AppScreen(
     val context = LocalContext.current
 
     var armed by remember { mutableStateOf(SettingsStore.isArmed(context)) }
+    var captureType by remember { mutableStateOf(SettingsStore.getCaptureType(context)) }
     var mode by remember { mutableStateOf(SettingsStore.getMode(context)) }
     var shotCount by remember { mutableStateOf(SettingsStore.getShotCount(context)) }
     var roundGap by remember { mutableStateOf(SettingsStore.getRoundGapMs(context)) }
     var pairGap by remember { mutableStateOf(SettingsStore.getPairGapMs(context)) }
+    var videoDuration by remember { mutableStateOf(SettingsStore.getVideoDurationMs(context)) }
 
     // Re-check permission/service status whenever the screen recomposes
     // after returning from a Settings screen.
@@ -253,7 +255,10 @@ private fun AppScreen(
                         fontSize = 13.sp
                     )
                     Text(
-                        "Press Volume Down ×3 within 1.5s to fire",
+                        if (captureType == CaptureType.PHOTO)
+                            "Press Volume Down ×3 within 1.5s to fire"
+                        else
+                            "Press Volume Down ×3 within 1.5s to record",
                         color = TextDim,
                         fontSize = 12.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -270,13 +275,19 @@ private fun AppScreen(
 
             // Summary row
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                SummaryStat(totalShots.toString(), "total shots", Modifier.weight(1f))
-                SummaryStat(formatMs(roundGap), "round gap", Modifier.weight(1f))
-                SummaryStat(
-                    if (mode == CameraMode.BOTH) formatMs(pairGap) else "—",
-                    "back→front",
-                    Modifier.weight(1f)
-                )
+                if (captureType == CaptureType.PHOTO) {
+                    SummaryStat(totalShots.toString(), "total shots", Modifier.weight(1f))
+                    SummaryStat(formatMs(roundGap), "round gap", Modifier.weight(1f))
+                    SummaryStat(
+                        if (mode == CameraMode.BOTH) formatMs(pairGap) else "—",
+                        "back→front",
+                        Modifier.weight(1f)
+                    )
+                } else {
+                    SummaryStat("1", "clip", Modifier.weight(1f))
+                    SummaryStat(formatMs(videoDuration), "duration", Modifier.weight(1f))
+                    SummaryStat(if (mode == CameraMode.BACK) "Back" else "Front", "camera", Modifier.weight(1f))
+                }
             }
 
             // Setup section
@@ -334,60 +345,12 @@ private fun AppScreen(
                     .background(Card, RoundedCornerShape(16.dp))
                     .border(1.dp, Border, RoundedCornerShape(16.dp))
             ) {
-                StepperRow(
-                    title = "Capture quantity",
-                    subtitle = "Rounds per trigger · $totalShots ${if (totalShots == 1) "image" else "images"} total",
-                    valueLabel = shotCount.toString(),
-                    onDec = {
-                        shotCount = (shotCount - 1).coerceIn(1, 20)
-                        SettingsStore.setShotCount(context, shotCount)
-                    },
-                    onInc = {
-                        shotCount = (shotCount + 1).coerceIn(1, 20)
-                        SettingsStore.setShotCount(context, shotCount)
-                    }
-                )
-                DividerLine()
-                StepperRow(
-                    title = "Capture time gap",
-                    subtitle = "Delay between each round",
-                    valueLabel = formatMs(roundGap),
-                    onDec = {
-                        roundGap = (roundGap - 100).coerceIn(100, 3000)
-                        SettingsStore.setRoundGapMs(context, roundGap)
-                    },
-                    onInc = {
-                        roundGap = (roundGap + 100).coerceIn(100, 3000)
-                        SettingsStore.setRoundGapMs(context, roundGap)
-                    }
-                )
-                DividerLine()
-                StepperRow(
-                    title = "Shot duration",
-                    subtitle = if (mode == CameraMode.BOTH) "Back → front switch delay" else "Only used when Both is selected",
-                    valueLabel = if (mode == CameraMode.BOTH) formatMs(pairGap) else "—",
-                    onDec = {
-                        pairGap = (pairGap - 50).coerceIn(0, 2000)
-                        SettingsStore.setPairGapMs(context, pairGap)
-                    },
-                    onInc = {
-                        pairGap = (pairGap + 50).coerceIn(0, 2000)
-                        SettingsStore.setPairGapMs(context, pairGap)
-                    },
-                    enabled = mode == CameraMode.BOTH
-                )
-                DividerLine()
-
-                // Camera mode
+                // Photo / Video
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Column {
-                        Text("Camera", color = TextPrimary, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
+                        Text("Capture type", color = TextPrimary, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
                         Text(
-                            when (mode) {
-                                CameraMode.BOTH -> "Fires back then front each round"
-                                CameraMode.BACK -> "Back camera only"
-                                CameraMode.FRONT -> "Front camera only"
-                            },
+                            if (captureType == CaptureType.PHOTO) "Burst of still photos" else "A single video clip",
                             color = TextFaint,
                             fontSize = 11.5.sp
                         )
@@ -399,18 +362,142 @@ private fun AppScreen(
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        ModeButton("Back", mode == CameraMode.BACK, Modifier.weight(1f)) {
-                            mode = CameraMode.BACK; SettingsStore.setMode(context, mode)
+                        ModeButton("Photo", captureType == CaptureType.PHOTO, Modifier.weight(1f)) {
+                            captureType = CaptureType.PHOTO
+                            SettingsStore.setCaptureType(context, captureType)
                         }
-                        ModeButton("Front", mode == CameraMode.FRONT, Modifier.weight(1f)) {
-                            mode = CameraMode.FRONT; SettingsStore.setMode(context, mode)
-                        }
-                        ModeButton("Both", mode == CameraMode.BOTH, Modifier.weight(1f)) {
-                            mode = CameraMode.BOTH; SettingsStore.setMode(context, mode)
+                        ModeButton("Video", captureType == CaptureType.VIDEO, Modifier.weight(1f)) {
+                            captureType = CaptureType.VIDEO
+                            SettingsStore.setCaptureType(context, captureType)
+                            // Video has no "Both" option — SettingsStore already
+                            // coerces this, just mirror it into local state.
+                            mode = SettingsStore.getMode(context)
                         }
                     }
                 }
                 DividerLine()
+
+                if (captureType == CaptureType.PHOTO) {
+                    StepperRow(
+                        title = "Capture quantity",
+                        subtitle = "Rounds per trigger · $totalShots ${if (totalShots == 1) "image" else "images"} total",
+                        valueLabel = shotCount.toString(),
+                        onDec = {
+                            shotCount = (shotCount - 1).coerceIn(1, 20)
+                            SettingsStore.setShotCount(context, shotCount)
+                        },
+                        onInc = {
+                            shotCount = (shotCount + 1).coerceIn(1, 20)
+                            SettingsStore.setShotCount(context, shotCount)
+                        }
+                    )
+                    DividerLine()
+                    StepperRow(
+                        title = "Capture time gap",
+                        subtitle = "Delay between each round",
+                        valueLabel = formatMs(roundGap),
+                        onDec = {
+                            roundGap = (roundGap - 100).coerceIn(100, 3000)
+                            SettingsStore.setRoundGapMs(context, roundGap)
+                        },
+                        onInc = {
+                            roundGap = (roundGap + 100).coerceIn(100, 3000)
+                            SettingsStore.setRoundGapMs(context, roundGap)
+                        }
+                    )
+                    DividerLine()
+                    StepperRow(
+                        title = "Shot duration",
+                        subtitle = if (mode == CameraMode.BOTH) "Back → front switch delay" else "Only used when Both is selected",
+                        valueLabel = if (mode == CameraMode.BOTH) formatMs(pairGap) else "—",
+                        onDec = {
+                            pairGap = (pairGap - 50).coerceIn(0, 2000)
+                            SettingsStore.setPairGapMs(context, pairGap)
+                        },
+                        onInc = {
+                            pairGap = (pairGap + 50).coerceIn(0, 2000)
+                            SettingsStore.setPairGapMs(context, pairGap)
+                        },
+                        enabled = mode == CameraMode.BOTH
+                    )
+                    DividerLine()
+
+                    // Camera mode — Back / Front / Both
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column {
+                            Text("Camera", color = TextPrimary, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                when (mode) {
+                                    CameraMode.BOTH -> "Fires back then front each round"
+                                    CameraMode.BACK -> "Back camera only"
+                                    CameraMode.FRONT -> "Front camera only"
+                                },
+                                color = TextFaint,
+                                fontSize = 11.5.sp
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1A1A1A), RoundedCornerShape(11.dp))
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            ModeButton("Back", mode == CameraMode.BACK, Modifier.weight(1f)) {
+                                mode = CameraMode.BACK; SettingsStore.setMode(context, mode)
+                            }
+                            ModeButton("Front", mode == CameraMode.FRONT, Modifier.weight(1f)) {
+                                mode = CameraMode.FRONT; SettingsStore.setMode(context, mode)
+                            }
+                            ModeButton("Both", mode == CameraMode.BOTH, Modifier.weight(1f)) {
+                                mode = CameraMode.BOTH; SettingsStore.setMode(context, mode)
+                            }
+                        }
+                    }
+                    DividerLine()
+                } else {
+                    StepperRow(
+                        title = "Video duration",
+                        subtitle = "Length of the recorded clip",
+                        valueLabel = formatMs(videoDuration),
+                        onDec = {
+                            videoDuration = (videoDuration - 500).coerceIn(1000, 15000)
+                            SettingsStore.setVideoDurationMs(context, videoDuration)
+                        },
+                        onInc = {
+                            videoDuration = (videoDuration + 500).coerceIn(1000, 15000)
+                            SettingsStore.setVideoDurationMs(context, videoDuration)
+                        }
+                    )
+                    DividerLine()
+
+                    // Camera mode — Back / Front only for video
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column {
+                            Text("Camera", color = TextPrimary, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                if (mode == CameraMode.BACK) "Back camera only" else "Front camera only",
+                                color = TextFaint,
+                                fontSize = 11.5.sp
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1A1A1A), RoundedCornerShape(11.dp))
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            ModeButton("Back", mode == CameraMode.BACK, Modifier.weight(1f)) {
+                                mode = CameraMode.BACK; SettingsStore.setMode(context, mode)
+                            }
+                            ModeButton("Front", mode == CameraMode.FRONT, Modifier.weight(1f)) {
+                                mode = CameraMode.FRONT; SettingsStore.setMode(context, mode)
+                            }
+                        }
+                    }
+                    DividerLine()
+                }
 
                 Row(
                     modifier = Modifier

@@ -1,7 +1,9 @@
 package com.shubhambera.volumeburstcam
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Build
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
@@ -12,13 +14,19 @@ import android.view.accessibility.AccessibilityEvent
  *
  * While armed (SettingsStore.isArmed), this intercepts Volume Down presses
  * so it can count them; when three land within 1.5s, it starts the capture
- * service and resets the counter. Volume Down is only consumed (blocked
- * from changing the volume) while armed — disarmed, it passes through
- * untouched.
+ * service and resets the counter.
+ *
+ * Every intercepted press still lowers the volume exactly as it normally
+ * would — we manually replay the adjustment via AudioManager before
+ * consuming the event — so arming the app doesn't break ordinary volume
+ * control for music, calls, etc. Disarmed, nothing is intercepted at all.
  */
 class VolumeAccessibilityService : AccessibilityService() {
 
     private val pressTimestamps = mutableListOf<Long>()
+    private val audioManager: AudioManager by lazy {
+        getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
 
     companion object {
         private const val WINDOW_MS = 1500L
@@ -43,9 +51,15 @@ class VolumeAccessibilityService : AccessibilityService() {
 
         if (event.action != KeyEvent.ACTION_DOWN) {
             // Still consume the matching ACTION_UP so the system doesn't
-            // register a lone volume-down press while armed.
+            // double-handle it — the actual volume change already happened
+            // on ACTION_DOWN below.
             return true
         }
+
+        // Replay the normal hardware-button behavior ourselves before we
+        // consume the event, so volume still goes down exactly as if the
+        // app weren't armed.
+        audioManager.adjustVolume(AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
 
         val now = System.currentTimeMillis()
         pressTimestamps.add(now)
@@ -56,8 +70,8 @@ class VolumeAccessibilityService : AccessibilityService() {
             startCapture()
         }
 
-        // Consumed: prevents the phone's volume from actually changing
-        // while armed.
+        // Consumed: we already handled the volume change manually above,
+        // so the system must not process this key a second time.
         return true
     }
 

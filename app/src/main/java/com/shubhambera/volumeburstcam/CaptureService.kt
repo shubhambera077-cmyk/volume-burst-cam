@@ -29,16 +29,23 @@ class CaptureService : LifecycleService() {
         startForeground(NOTIFICATION_ID, buildNotification())
 
         val mode = SettingsStore.getMode(this)
+        val captureType = SettingsStore.getCaptureType(this)
         val shotCount = SettingsStore.getShotCount(this)
         val roundGapMs = SettingsStore.getRoundGapMs(this)
         val pairGapMs = SettingsStore.getPairGapMs(this)
+        val videoDurationMs = SettingsStore.getVideoDurationMs(this)
 
         val controller = CameraBurstController(applicationContext, this)
 
         lifecycleScope.launch {
             try {
-                controller.runBurst(mode, shotCount, roundGapMs, pairGapMs) { progress ->
-                    updateNotification(progress.done, progress.total)
+                when (captureType) {
+                    CaptureType.PHOTO -> controller.runBurst(mode, shotCount, roundGapMs, pairGapMs) { progress ->
+                        updateNotification(progress.done, progress.total)
+                    }
+                    CaptureType.VIDEO -> controller.runVideoCapture(mode, videoDurationMs, pairGapMs) { progress ->
+                        updateNotification(progress.done, progress.total)
+                    }
                 }
             } catch (t: Throwable) {
                 // Swallow: a failed capture shouldn't crash the service.
